@@ -25,7 +25,7 @@ const auth = getAuth(firebase);
 
 const app = express();
 
-app.use(userRouter);
+app.use("/user/", userRouter);
 app.use(cors());
 app.use(express.json());
 
