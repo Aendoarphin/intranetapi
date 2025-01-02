@@ -25,9 +25,11 @@ const auth = getAuth(firebase);
 
 const app = express();
 
-app.use("/user/", userRouter);
+
 app.use(cors());
 app.use(express.json());
+
+app.use("/user", userRouter);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
