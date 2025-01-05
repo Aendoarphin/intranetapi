@@ -27,11 +27,16 @@ userRouter
       );
       const user = userCredential.user;
       const userRef = doc(db, targetCollection, email);
+      const parsedUser = JSON.parse(JSON.stringify(user))
       const newUser = {
+        uid: parsedUser.uid,
         first,
         last,
         role,
-        ...JSON.parse(JSON.stringify(user)),
+        email: parsedUser.email,
+        lastLoginAt: parsedUser.lastLoginAt,
+        createdAt: parsedUser.createdAt,
+        emailVerified: parsedUser.emailVerified,
       };
       await setDoc(userRef, newUser);
       res.json({ message: "User was added", newUser });
