@@ -1,4 +1,4 @@
-import express, { query } from "express";
+import express from "express";
 import { auth, db } from "../index.js";
 import {
   setDoc,
@@ -6,10 +6,10 @@ import {
   getDoc,
   collection,
   getDocs,
-  queryEqual,
   where,
+  query,
 } from "firebase/firestore";
-import { getAuth, createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/auth"; // continue from here
+import { getAuth, createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 
 const userRouter = express.Router();
 
@@ -69,17 +69,18 @@ userRouter
     }
   })
   // Delete one user by id
-  .delete("/", (req, res) => {
+  .delete("/", async (req, res) => {
     try {
-      const userRef = doc(db, targetCollection, req.body.email);
-      const userSnapshot = getDoc(userRef);
-      if (!userSnapshot.exists()) {
-        res.json({ message: "User not found, nothing to delete" });
-        return;
-      }
-      auth.currentUser.delete
+      const { email } = req.body;
+      const q = query(collection(db, targetCollection), where("email", "==", email));
+      const querySnapshot = await getDocs(q);
+      const targetUser = []
+      querySnapshot.forEach((doc) => {
+        targetUser.push(doc.data());
+      });
+      targetUser.length === 1 ? res.json ({ message: "User deleted", data: targetUser[0] }) : res.json({ message: "User not found" })
     } catch (e) {
-      res.json({ message: "Something went wrong: " + error.message });
+      res.json({ message: "Something went wrong: " + e.message });
     }
   });
 
