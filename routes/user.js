@@ -9,7 +9,18 @@ import {
   where,
   query,
 } from "firebase/firestore";
-import { getAuth, createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+
+const observeAuth = (req, res, next) => {
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      console.log("User logged in: " + user.email);
+      next();
+      return;
+    }
+    next();
+  })
+};
 
 const userRouter = express.Router();
 
@@ -87,6 +98,27 @@ userRouter
     } catch (e) {
       res.json({ message: "Something went wrong: " + e.message });
     }
-  });
+  })
+
+// CONTINUE FROM HERE
+
+  // Sign user in
+  .post("/login", observeAuth, async (req, res) => {
+    try {
+      await signInWithEmailAndPassword(auth, req.body.email, req.body.password)
+      res.json({ message: "User logged in", data: auth.currentUser })
+    } catch (e) {
+      res.json({ message: "Something went wrong: " + e.message });
+    }
+  })
+  // Sign user out
+  .delete("/logout", async (req, res) => {
+    try {
+      signOut(auth)
+      res.json({ message: "User logged out", data: auth.currentUser.email })
+    } catch (e) {
+      res.json({ message: "Something went wrong: " + e.message });
+    }
+  })
 
 export default userRouter;

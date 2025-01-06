@@ -4,7 +4,7 @@ import userRouter from "./routes/user.js";
 import dotenv from "dotenv";
 
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 dotenv.config();
