@@ -1,6 +1,7 @@
 import express from "express";
 import { auth, db } from "../index.js";
 import {
+  deleteDoc,
   setDoc,
   doc,
   getDoc,
@@ -9,7 +10,14 @@ import {
   where,
   query,
 } from "firebase/firestore";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  AuthErrorCodes,
+  getIdToken,
+} from "firebase/auth";
 
 const observeAuth = (req, res, next) => {
   onAuthStateChanged(auth, (user) => {
@@ -19,7 +27,7 @@ const observeAuth = (req, res, next) => {
       return;
     }
     next();
-  })
+  });
 };
 
 const userRouter = express.Router();
@@ -38,7 +46,7 @@ userRouter
       );
       const user = userCredential.user;
       const userRef = doc(db, targetCollection, email);
-      const parsedUser = JSON.parse(JSON.stringify(user))
+      const parsedUser = JSON.parse(JSON.stringify(user));
       const newUser = {
         uid: parsedUser.uid,
         first,
@@ -48,6 +56,7 @@ userRouter
         lastLoginAt: parsedUser.lastLoginAt,
         createdAt: parsedUser.createdAt,
         emailVerified: parsedUser.emailVerified,
+        idToken: await getIdToken(user),
       };
       await setDoc(userRef, newUser);
       res.json({ message: "User was added", newUser });
@@ -85,40 +94,50 @@ userRouter
     }
   })
   // Delete one user by id
-  .delete("/", async (req, res) => {
+  .delete("/delete", async (req, res) => {
     try {
       const { email } = req.body;
-      const q = query(collection(db, targetCollection), where("email", "==", email));
+      const q = query(
+        collection(db, targetCollection),
+        where("email", "==", email)
+      );
       const querySnapshot = await getDocs(q);
-      const targetUser = []
+      const targetUser = [];
       querySnapshot.forEach((doc) => {
         targetUser.push(doc.data());
       });
-      targetUser.length === 1 ? res.json ({ message: "User deleted", data: targetUser[0] }) : res.json({ message: "User not found" })
+      if (targetUser.length === 1) {
+        await deleteDoc(doc(db, targetCollection, email));
+        res.json({ message: "User deleted", data: targetUser[0] });
+        return;
+      }
+      res.json({ message: "User not found" });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.message });
+      res.json({ message: "Something went wrong: " + e.code });
     }
-  })
-
-// CONTINUE FROM HERE
+  }) // CONTINUE FROM HERE
 
   // Sign user in
   .post("/login", observeAuth, async (req, res) => {
     try {
-      await signInWithEmailAndPassword(auth, req.body.email, req.body.password)
-      res.json({ message: "User logged in", data: auth.currentUser })
+      // Check user cookies if they still
+      await signInWithEmailAndPassword(auth, req.body.email, req.body.password);
+      res.json({ message: "User logged in", data: auth.currentUser });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.message });
+      res.json({ message: "Something went wrong: " + e.code });
     }
   })
   // Sign user out
   .delete("/logout", async (req, res) => {
     try {
-      signOut(auth)
-      res.json({ message: "User logged out", data: auth.currentUser.email })
+      signOut(auth);
+      res.json({
+        message: "User logged out",
+        whoLoggedOut: auth.currentUser ? auth.currentUser.email : null,
+      });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.message });
+      res.json({ message: "Something went wrong: " + e.code });
     }
-  })
+  });
 
 export default userRouter;
