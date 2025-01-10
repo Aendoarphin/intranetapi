@@ -15,9 +15,22 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  AuthErrorCodes,
   getIdToken,
+  deleteUser,
 } from "firebase/auth";
+
+const handleError = (res, error) => {
+  res.json({ message: "Something went wrong: " + error.message });
+};
+
+const getUserRef = (db, email) => {
+  return doc(db, targetCollection, email);
+};
+
+const extractUserData = (req) => {
+  const { email, password, first, last, role } = req.body;
+  return { email, password, first, last, role };
+};
 
 const observeAuth = (req, res, next) => {
   onAuthStateChanged(auth, (user) => {
@@ -45,7 +58,7 @@ userRouter
         password
       );
       const user = userCredential.user;
-      const userRef = doc(db, targetCollection, email);
+      const userRef = getUserRef(db, email);
       const parsedUser = JSON.parse(JSON.stringify(user));
       const newUser = {
         uid: parsedUser.uid,
@@ -61,7 +74,7 @@ userRouter
       await setDoc(userRef, newUser);
       res.json({ message: "User was added", newUser });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.message });
+      handleError(res, e);
     }
   })
   // Get all users
@@ -74,15 +87,13 @@ userRouter
       });
       res.json({ message: "All users", count: allUsers.length, allUsers });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.message });
+      handleError(res, e);
     }
   })
   // Get one user by email
   .get("/:email", async (req, res) => {
     try {
-      const docSnapshot = await getDoc(
-        doc(db, targetCollection, req.params.email)
-      );
+      const docSnapshot = await getDoc(getUserRef(db, req.params.email));
       if (!docSnapshot.exists()) {
         res.json({ message: "User not found" });
         return;
@@ -90,7 +101,7 @@ userRouter
       const targetUser = docSnapshot.data();
       res.json({ message: "User found", targetUser });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.message });
+      handleError(res, e);
     }
   })
   // Delete one user by id
@@ -107,28 +118,27 @@ userRouter
         targetUser.push(doc.data());
       });
       if (targetUser.length === 1) {
-        await deleteDoc(doc(db, targetCollection, email));
+        await deleteDoc(querySnapshot.docs[0].ref);
+        deleteUser(auth.currentUser);
         res.json({ message: "User deleted", data: targetUser[0] });
         return;
       }
       res.json({ message: "User not found" });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.code });
+      handleError(res, e);
     }
-  }) // CONTINUE FROM HERE
-
+  })
   // Sign user in
   .post("/login", observeAuth, async (req, res) => {
     try {
-      // Check user cookies if they still
       await signInWithEmailAndPassword(auth, req.body.email, req.body.password);
       res.json({ message: "User logged in", data: auth.currentUser });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.code });
+      handleError(res, e);
     }
   })
   // Sign user out
-  .delete("/logout", async (req, res) => {
+  .delete("/logout", observeAuth, async (req, res) => {
     try {
       signOut(auth);
       res.json({
@@ -136,7 +146,7 @@ userRouter
         whoLoggedOut: auth.currentUser ? auth.currentUser.email : null,
       });
     } catch (e) {
-      res.json({ message: "Something went wrong: " + e.code });
+      handleError(res, e);
     }
   });
 
