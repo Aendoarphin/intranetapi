@@ -19,11 +19,15 @@ import {
 	getIdToken,
 	deleteUser,
 	getIdTokenResult,
-  getUserById
 } from "firebase/auth";
 
+let currentUser = null;
+
 const handleError = (res, error) => {
-	res.json({ message: "Something went wrong: " + error.message });
+	res.json({
+		message: "Something went wrong: " + error.message,
+		stack: error.stack,
+	});
 };
 
 const getUserRef = (db, email) => {
@@ -65,18 +69,15 @@ userRouter
 				password
 			);
 			const user = userCredential.user;
+			currentUser = user;
 			const userRef = getUserRef(db, email);
 			const parsedUser = JSON.parse(JSON.stringify(user));
 			const newUser = {
-				uid: parsedUser.uid,
+				email: parsedUser.email,
 				first,
 				last,
 				role,
-				email: parsedUser.email,
-				lastLoginAt: parsedUser.lastLoginAt,
-				createdAt: parsedUser.createdAt,
-				emailVerified: parsedUser.emailVerified,
-				idToken: await getIdToken(user),
+				userInfo: parsedUser,
 			};
 			const idTokenInfo = await getIdTokenResult(user, req);
 			await setDoc(doc(db, sessionsCollection, user.email), {
@@ -128,8 +129,7 @@ userRouter
 	// Update user
 	.put("/update", observeAuth, async (req, res) => {
 		try {
-			const uid = auth.currentUser.uid;
-			res.json({ uid: uid });
+			res.json({ user: auth.currentUser });
 		} catch (e) {
 			handleError(res, e);
 		}
@@ -140,7 +140,7 @@ userRouter
 			const { email } = req.body;
 			const q = query(
 				collection(db, userCollection),
-				where("email", "==", email)
+				where("userInfo.email", "==", email)
 			);
 			const querySnapshot = await getDocs(q);
 			const targetUser = [];
@@ -148,10 +148,12 @@ userRouter
 				targetUser.push(doc.data());
 			});
 			if (targetUser.length === 1) {
-        const uid = targetUser[0].uid;
+				if (currentUser) {
+					await deleteUser(currentUser);
+					console.log("User deleted: " + currentUser.email);
+				}
 
 				await deleteDoc(querySnapshot.docs[0].ref);
-				await deleteUser(auth.currentUser); // CONTINUE HERE
 				await deleteDoc(doc(db, sessionsCollection, email));
 				res.json({ message: "User deleted", data: targetUser[0] });
 				return;
@@ -164,10 +166,15 @@ userRouter
 	// Sign user out
 	.delete("/logout", observeAuth, async (req, res) => {
 		try {
-			signOut(auth);
+			let targetUser = null;
+			if (auth.currentUser) {
+				targetUser = auth.currentUser.email;
+				await deleteDoc(doc(db, sessionsCollection, targetUser));
+			}
+			await signOut(auth);
 			res.json({
 				message: "User logged out",
-				whoLoggedOut: auth.currentUser ? auth.currentUser.email : null,
+				whoLoggedOut: targetUser,
 			});
 		} catch (e) {
 			handleError(res, e);
